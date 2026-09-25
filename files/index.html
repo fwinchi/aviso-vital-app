@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aviso Vital</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2e7d32">
+<style>
+  :root {
+    --verde: #2e7d32;
+    --verde-claro: #4caf50;
+    --gris: #f4f4f4;
+    --texto: #222;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Arial, sans-serif;
+    background: var(--gris);
+    color: var(--texto);
+    margin: 0;
+    padding: 20px;
+    padding-top: env(safe-area-inset-top, 20px);
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  h1 {
+    text-align: center;
+    color: var(--verde);
+    font-size: 28px;
+  }
+  .tarjeta {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-top: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  label {
+    display: block;
+    font-size: 18px;
+    margin-top: 16px;
+    margin-bottom: 6px;
+    font-weight: bold;
+  }
+  input, textarea {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  button {
+    width: 100%;
+    font-size: 20px;
+    padding: 18px;
+    margin-top: 20px;
+    border: none;
+    border-radius: 12px;
+    background: var(--verde);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button:active { background: var(--verde-claro); }
+  .boton-checkin {
+    font-size: 26px;
+    padding: 28px;
+    background: var(--verde-claro);
+  }
+  #estado {
+    text-align: center;
+    font-size: 16px;
+    margin-top: 12px;
+    min-height: 24px;
+  }
+  .oculto { display: none; }
+  .info {
+    font-size: 15px;
+    color: #555;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>💚 Aviso Vital</h1>
+
+<!-- Pantalla de registro (primera vez) -->
+<div class="tarjeta" id="pantalla-registro">
+  <label for="email">Email de la persona que recibirá el mensaje</label>
+  <input type="email" id="email" placeholder="hijo@ejemplo.com">
+
+  <label for="mensaje">Tu mensaje</label>
+  <textarea id="mensaje" placeholder="Escribe aquí lo que quieres que reciba..."></textarea>
+
+  <button onclick="registrar()">Guardar y activar</button>
+  <div id="estado"></div>
+</div>
+
+<!-- Pantalla de check-in (ya registrado) -->
+<div class="tarjeta oculto" id="pantalla-checkin">
+  <p class="info">Todo configurado. Pulsa cada mes:</p>
+  <button class="boton-checkin" onclick="checkin()">✅ Sigo bien</button>
+  <div id="estado-checkin"></div>
+  <p class="info" id="fecha-info"></p>
+  <button style="background:#999; margin-top:30px;" onclick="borrarConfiguracion()">Cambiar mensaje / destinatario</button>
+</div>
+
+<script>
+const API_URL = "https://aviso-vital-backend.onrender.com"; // backend en Render
+
+function mostrarPantalla() {
+  const id = localStorage.getItem("avisoVitalId");
+  if (id) {
+    document.getElementById("pantalla-registro").classList.add("oculto");
+    document.getElementById("pantalla-checkin").classList.remove("oculto");
+    const fecha = localStorage.getItem("avisoVitalUltimoCheckin");
+    if (fecha) {
+      document.getElementById("fecha-info").innerText =
+        "Último check-in: " + new Date(fecha).toLocaleDateString("es-ES");
+    }
+  } else {
+    document.getElementById("pantalla-registro").classList.remove("oculto");
+    document.getElementById("pantalla-checkin").classList.add("oculto");
+  }
+}
+
+async function registrar() {
+  const email = document.getElementById("email").value.trim();
+  const mensaje = document.getElementById("mensaje").value.trim();
+  const estado = document.getElementById("estado");
+
+  if (!email || !mensaje) {
+    estado.innerText = "Rellena el email y el mensaje.";
+    return;
+  }
+  estado.innerText = "Guardando...";
+  try {
+    const resp = await fetch(`${API_URL}/registrar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email_destino: email, mensaje })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      localStorage.setItem("avisoVitalId", data.id);
+      localStorage.setItem("avisoVitalUltimoCheckin", new Date().toISOString());
+      mostrarPantalla();
+    } else {
+      estado.innerText = "Error: " + (data.error || "inténtalo de nuevo");
+    }
+  } catch (e) {
+    estado.innerText = "No se pudo conectar. Revisa tu internet.";
+  }
+}
+
+async function checkin() {
+  const id = localStorage.getItem("avisoVitalId");
+  const estado = document.getElementById("estado-checkin");
+  estado.innerText = "Confirmando...";
+  try {
+    const resp = await fetch(`${API_URL}/checkin/${id}`, { method: "POST" });
+    const data = await resp.json();
+    if (data.ok) {
+      localStorage.setItem("avisoVitalUltimoCheckin", new Date().toISOString());
+      estado.innerText = "✅ ¡Confirmado! Todo en orden.";
+      mostrarPantalla();
+    } else {
+      estado.innerText = "Error al confirmar.";
+    }
+  } catch (e) {
+    estado.innerText = "No se pudo conectar. Revisa tu internet.";
+  }
+}
+
+function borrarConfiguracion() {
+  if (confirm("¿Seguro que quieres cambiar el mensaje o destinatario? Se creará un nuevo registro.")) {
+    localStorage.removeItem("avisoVitalId");
+    localStorage.removeItem("avisoVitalUltimoCheckin");
+    mostrarPantalla();
+  }
+}
+
+mostrarPantalla();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+</body>
+</html>
